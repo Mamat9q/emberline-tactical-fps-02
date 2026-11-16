@@ -142,6 +142,9 @@ export function createBots(scene, colliders, shootables, effects, audio, events)
       blindedUntil: 0,
       revealedUntil: 0,
       walkPhase: Math.random() * 6,
+      stepAcc: 0, // metres walked since the last audible footstep
+      lastStepX: spawn.x,
+      lastStepZ: spawn.z,
       fall: 0,
       flankAt: 8 + Math.random() * 8,
       strafeDir: 1,
@@ -493,6 +496,19 @@ export function createBots(scene, colliders, shootables, effects, audio, events)
     bot.position.x = Math.max(MAP.minX + 0.5, Math.min(MAP.maxX - 0.5, bot.position.x));
     bot.position.z = Math.max(MAP.minZ + 0.5, Math.min(MAP.maxZ - 0.5, bot.position.z));
 
+    // Monsoon footsteps: one directional step every ~2.4 m of travel,
+    // attenuated by distance and panned by the player's frame (audio.step
+    // does the falloff, the pan and the rain masking). Only moving bots
+    // step — holders standing still stay silent, so sound is information.
+    const moved = Math.hypot(bot.position.x - bot.lastStepX, bot.position.z - bot.lastStepZ);
+    bot.stepAcc += moved;
+    bot.lastStepX = bot.position.x;
+    bot.lastStepZ = bot.position.z;
+    if (bot.stepAcc > 2.4) {
+      bot.stepAcc = 0;
+      audio.step(bot.position, ctx.player.position, ctx.player.yaw || 0);
+    }
+
     // --- Pose ---
     meshes.group.position.set(bot.position.x, 0, bot.position.z);
     meshes.group.rotation.y = bot.yaw;
@@ -562,6 +578,9 @@ export function createBots(scene, colliders, shootables, effects, audio, events)
       bot.grenades = 1;
       bot.revealedUntil = 0;
       bot.fall = 0;
+      bot.stepAcc = 0;
+      bot.lastStepX = bot.position.x;
+      bot.lastStepZ = bot.position.z;
       bot.flanked = false;
       bot.detouring = false;
       bot.flankAt = 10 + Math.random() * 10;

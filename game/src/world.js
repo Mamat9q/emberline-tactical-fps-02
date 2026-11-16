@@ -14,7 +14,47 @@ export const MAP = {
   defenderSpawn: new THREE.Vector3(0, 0, -18),
 };
 
-export function createWorld(scene) {
+// --- Monsoon Depot tuning (named constants, one place) ---
+// Rev 1 — RAIN: seeded deterministic drops over the whole yard. The reset
+// re-derives x from the drop index (a hash, not Math.random) so the rain
+// is identical every run; only the fall loop mutates positions.
+export const RAIN_DROPS = 1200;
+export const RAIN_DROPS_LOWFX = 400; // headless-probe mode: fewer points, same look
+export const RAIN_FALL_SPEED = 14; // m/s straight down
+export const RAIN_WIND_X = 1.6; // m/s slant, rain leans east
+export const RAIN_AREA_X = 28; // half-width of the rain box (== map half-width)
+export const RAIN_AREA_Z = 22; // half-depth of the rain box (== map half-depth)
+export const RAIN_HEIGHT = 12; // drops spawn at y=12, reset at y<0
+export const RAIN_SEED = 1337;
+export const RAIN_POINT_SIZE = 0.12;
+export const RAIN_OPACITY = 0.55;
+// Wet ground: rain darkens and glosses the yard — sand and asphalt get
+// lower roughness and real metalness so the lamps streak on them.
+export const WET_SAND_ROUGHNESS = 0.55;
+export const WET_SAND_METALNESS = 0.22;
+export const WET_ASPHALT_ROUGHNESS = 0.45;
+export const WET_ASPHALT_METALNESS = 0.3;
+// Rev 2 — LAMPLIGHT: pools of sodium light, lanes between them left dark.
+export const LAMP_INTENSITY = 20; // was 12 — pools now read from across the yard
+export const LAMP_DISTANCE = 16; // was 13
+export const LAMP_CONE_RADIUS = 3.0;
+export const LAMP_CONE_HEIGHT = 4.3;
+export const LAMP_CONE_OPACITY = 0.1;
+export const LAMP_POOL_RADIUS = 3.2;
+export const LAMP_POOL_OPACITY = 0.16;
+export const HEMI_INTENSITY = 1.7; // was 2.0 — darker lanes between lamps
+export const FILL_INTENSITY = 1.3; // was 1.6
+
+// Deterministic 32-bit hash -> [0,1): rain positions and resets derive from
+// the drop index alone, so no Math.random in the rain path.
+function rainHash(i, salt) {
+  let h = (RAIN_SEED + i * 374761393 + salt * 668265263) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+export function createWorld(scene, opts = {}) {
+  const lowfx = !!opts.lowfx;
   const group = new THREE.Group();
   scene.add(group);
 
@@ -22,8 +62,12 @@ export function createWorld(scene) {
   for (const name of Object.keys(PALETTE)) {
     materials[name] = new THREE.MeshStandardMaterial({
       color: new THREE.Color(PALETTE[name]),
-      roughness: name === 'amber' || name === 'sun' ? 0.5 : 0.92,
-      metalness: name === 'steel' ? 0.45 : 0.04,
+      roughness: name === 'amber' || name === 'sun' ? 0.5
+        : name === 'sand' ? WET_SAND_ROUGHNESS
+        : name === 'asphalt' ? WET_ASPHALT_ROUGHNESS : 0.92,
+      metalness: name === 'steel' ? 0.45
+        : name === 'sand' ? WET_SAND_METALNESS
+        : name === 'asphalt' ? WET_ASPHALT_METALNESS : 0.04,
       emissive: name === 'sun' ? new THREE.Color(PALETTE.sun) : new THREE.Color(0x000000),
       emissiveIntensity: name === 'sun' ? 0.6 : 0,
     });
@@ -360,7 +404,7 @@ export function createWorld(scene) {
   sunDisc.lookAt(0, 4, 0);
   scene.add(sunDisc);
 
-  const hemi = new THREE.HemisphereLight(new THREE.Color('#6b5790'), new THREE.Color('#7a5638'), 2.0);
+  const hemi = new THREE.HemisphereLight(new THREE.Color('#6b5790'), new THREE.Color('#7a5638'), HEMI_INTENSITY);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(new THREE.Color('#ffb347'), 2.6);
   sun.position.set(-60, 22, -18);
@@ -374,15 +418,65 @@ export function createWorld(scene) {
   sun.shadow.camera.far = 160;
   sun.shadow.bias = -0.0006;
   scene.add(sun, sun.target);
-  const fill = new THREE.DirectionalLight(new THREE.Color('#8a7cc0'), 1.6);
+  const fill = new THREE.DirectionalLight(new THREE.Color('#8a7cc0'), FILL_INTENSITY);
   fill.position.set(30, 24, 30);
   scene.add(fill);
+
+  // --- Rev 1 — RAIN: one THREE.Points cloud over the yard. Positions are
+  // seeded (rainHash), the fall loop only mutates y/x, and a drop that hits
+  // the ground resets to the top with a hashed x — deterministic, no
+  // Math.random, and cheap enough to run even in ?lowfx (fewer drops).
+  const rainCount = lowfx ? RAIN_DROPS_LOWFX : RAIN_DROPS;
+  const rainPos = new Float32Array(rainCount * 3);
+  for (let i = 0; i < rainCount; i += 1) {
+    rainPos[i * 3] = -RAIN_AREA_X + rainHash(i, 1) * RAIN_AREA_X * 2;
+    rainPos[i * 3 + 1] = rainHash(i, 2) * RAIN_HEIGHT;
+    rainPos[i * 3 + 2] = -RAIN_AREA_Z + rainHash(i, 3) * RAIN_AREA_Z * 2;
+  }
+  const rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+  const rain = new THREE.Points(rainGeo, new THREE.PointsMaterial({
+    color: 0x9fb4cc, size: RAIN_POINT_SIZE, sizeAttenuation: true,
+    transparent: true, opacity: RAIN_OPACITY, depthWrite: false, fog: false,
+  }));
+  scene.add(rain);
+  function stepRain(dt) {
+    const arr = rainGeo.attributes.position.array;
+    const fall = RAIN_FALL_SPEED * dt;
+    const drift = RAIN_WIND_X * dt;
+    for (let i = 0; i < rainCount; i += 1) {
+      let y = arr[i * 3 + 1] - fall;
+      let x = arr[i * 3] + drift;
+      if (y < 0) {
+        y = RAIN_HEIGHT;
+        x = -RAIN_AREA_X + rainHash(i, 7) * RAIN_AREA_X * 2;
+      }
+      if (x > RAIN_AREA_X) x -= RAIN_AREA_X * 2;
+      arr[i * 3] = x;
+      arr[i * 3 + 1] = y;
+    }
+    rainGeo.attributes.position.needsUpdate = true;
+  }
 
   // Sodium lamps along the lanes. The two mid-lane lamps sit 2.5 m off the
   // centre line — an earlier (0,12)/(0,-12) placement put a solid pole
   // dead-centre on the mid walkway (spawn -> midSouth), where it blocked
   // the straight lane for the player and for every bot pathing mid.
   const lampPositions = [[-22, 6], [22, 6], [-22, -10], [22, -10], [2.5, 12], [-2.5, -12]];
+  // Rev 2 — LAMPLIGHT: a visible cone of sodium light under each lamp plus
+  // a bright pool on the wet ground, so the lamps read as pools of light
+  // with deliberately darker lanes between them. Light COUNT is unchanged
+  // (6 PointLights) — cones and pools are unlit meshes, near-free.
+  const lampConeGeo = new THREE.ConeGeometry(LAMP_CONE_RADIUS, LAMP_CONE_HEIGHT, 20, 1, true);
+  const lampConeMat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(PALETTE.amber), transparent: true, opacity: LAMP_CONE_OPACITY,
+    blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false, fog: false,
+  });
+  const lampPoolGeo = new THREE.CircleGeometry(LAMP_POOL_RADIUS, 24);
+  const lampPoolMat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(PALETTE.amber), transparent: true, opacity: LAMP_POOL_OPACITY,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  });
   for (const [x, z] of lampPositions) {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 4.4, 8), materials.steel);
     post.position.set(x, 2.2, z);
@@ -390,10 +484,17 @@ export function createWorld(scene) {
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), glowAmber);
     lamp.position.set(x, 4.5, z);
     group.add(lamp);
-    const light = new THREE.PointLight(new THREE.Color(PALETTE.amber), 12, 13);
+    const light = new THREE.PointLight(new THREE.Color(PALETTE.amber), LAMP_INTENSITY, LAMP_DISTANCE);
     light.position.set(x, 4.3, z);
     scene.add(light);
+    const cone = new THREE.Mesh(lampConeGeo, lampConeMat);
+    cone.position.set(x, 4.5 - LAMP_CONE_HEIGHT / 2, z);
+    scene.add(cone);
+    const pool = new THREE.Mesh(lampPoolGeo, lampPoolMat);
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(x, 0.06, z);
+    scene.add(pool);
   }
 
-  return { colliders, shootables, group, siteRings, siteSigns };
+  return { colliders, shootables, group, siteRings, siteSigns, rain, stepRain, rainCount, lampIntensity: LAMP_INTENSITY };
 }

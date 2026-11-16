@@ -9,7 +9,14 @@ One server, no build step, no network requests, no external assets: every
 sound is synthesized with WebAudio and every model is procedural geometry.
 
 **The yard.** Kestrel Yard is a decommissioned solar refinery at dusk — indigo
-sky, a low amber sun, long shadows, sodium lamps, teal hazard paint. Two bomb
+sky, a low amber sun, long shadows, sodium lamps, teal hazard paint — and now
+it rains. Monsoon rain falls across the whole yard (1,200 seeded drops), the
+sand and asphalt run wet and glossy under the lamps, and each of the six
+sodium lamps throws a visible cone of light and a bright pool on the wet
+ground, with deliberately darker lanes between them. Sound decides fights
+too: footsteps are directional (distance + stereo pan), the rain hiss masks
+them, and the plant/defuse channel beeps a rising cadence you can hear
+through walls. Two bomb
 sites: **A — Solar Array** (north-west) and **B — Pump House** (north-east).
 Three lanes (west, mid, east) cross the yard between two band walls.
 
@@ -76,7 +83,11 @@ Beyond the lanes and sites: the solar panels are gridded photovoltaic cells,
 floating A and B letters mark the sites, the ground carries tyre tracks, oil
 stains and amber hazard chevrons at the site entrances, crates are stacked
 two high, tyre stacks and barrel clusters mark the spawn approaches, pipes
-run along the band walls, and early stars are out in the indigo sky.
+run along the band walls, and early stars are out in the indigo sky. Monsoon
+rain falls over the whole yard, the wet ground shines under six sodium lamps
+— each with a visible light cone and a bright pool, darker lanes between
+them — and every footstep, plant beep and defuse beep is placed in stereo,
+half-masked by the rain.
 
 ## Testing
 

@@ -43,7 +43,7 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 camera.rotation.order = 'YXZ';
 scene.add(camera);
 
-const world = createWorld(scene);
+const world = createWorld(scene, { lowfx });
 const effects = createEffects(scene);
 const hud = createHud();
 const input = createInput(canvas, (locked) => {
@@ -294,6 +294,7 @@ const bots = createBots(scene, world.colliders, world.shootables, effects, audio
   },
   onPlantProgress(bot, progress) {
     hud.showProgress(`PLANTING — ${bot.name}`, progress);
+    audio.plantBeep(progress, Math.hypot(bot.position.x - player.state.position.x, bot.position.z - player.state.position.z));
   },
   onPlantDone(bot) {
     match.botPlantDone(bot);
@@ -301,6 +302,7 @@ const bots = createBots(scene, world.colliders, world.shootables, effects, audio
   },
   onDefuseProgress(bot, progress) {
     hud.showProgress(`DEFUSING — ${bot.name}`, progress);
+    audio.defuseBeep(progress, Math.hypot(bot.position.x - player.state.position.x, bot.position.z - player.state.position.z));
   },
   onDefuseDone(bot) {
     match.botDefuseDone(bot);
@@ -574,7 +576,7 @@ function stepSim(dt) {
         stepAcc += player.groundSpeed() * dt;
         if (stepAcc > 2.4) {
           stepAcc = 0;
-          audio.step();
+          audio.step(player.state.position, player.state.position, player.state.yaw);
         }
       }
       // Firing: hold for autos, click per shot for semi-autos.
@@ -590,6 +592,7 @@ function stepSim(dt) {
         if (planting) {
           const p = match.plantTick(dt, 'player', true);
           hud.showProgress('PLANTING THE BOMB', p);
+          audio.plantBeep(p, 0); // plant telegraph: rising beeps, throttled inside
           if (p >= 1) {
             planting = false;
             hud.hideProgress();
@@ -608,6 +611,7 @@ function stepSim(dt) {
         dt,
         player: {
           position: player.state.position,
+          yaw: player.state.yaw,
           alive: player.state.alive,
           team: 'V',
           hitMeshes: playerHitMeshes,
@@ -631,6 +635,7 @@ function stepSim(dt) {
 
   weaponView.step(dt, player.groundSpeed(), rightMouse && player.state.alive);
   effects.step(dt);
+  world.stepRain(dt); // monsoon rain falls even in frozen ?shot= frames
   pulseCooldownLeft = Math.max(0, pulseCooldownLeft - dt);
   if (match.state.bomb.state === 'planted') {
     const remain = match.state.bomb.explodeAt - time;
@@ -905,6 +910,14 @@ window.__emberline = {
       timer: match.state.timer, kills: match.state.kills, deaths: match.state.deaths,
       site: match.state.site, money: match.state.money,
       bomb: { state: match.state.bomb.state, site: match.state.bomb.site, carrier: match.state.bomb.carrier === 'player' ? 'player' : (match.state.bomb.carrier ? match.state.bomb.carrier.name : null) },
+    };
+  },
+  get monsoon() {
+    return {
+      rainDrops: world.rainCount,
+      rainY0: world.rain.geometry.attributes.position.array[1],
+      lampIntensity: world.lampIntensity,
+      lampCount: 6,
     };
   },
   // Read-only LOS query (eye 1.62 -> torso 1.05). Never writes to the game.
