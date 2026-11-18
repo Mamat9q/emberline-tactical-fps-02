@@ -1,7 +1,3 @@
-[![make.fun · threejs-fps-02](https://make.fun/badge/threejs-fps-02.svg)](https://make.fun/bounty/threejs-fps-02?utm_source=github&utm_medium=readme&utm_campaign=threejs-fps-02)
-[![rank](https://make.fun/badge/threejs-fps-02/Mamat9q/emberline-tactical-fps-02/rank.svg)](https://make.fun/bounty/threejs-fps-02/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=threejs-fps-02)
-[![reward](https://make.fun/badge/threejs-fps-02/Mamat9q/emberline-tactical-fps-02/reward.svg)](https://make.fun/bounty/threejs-fps-02?utm_source=github&utm_medium=readme&utm_campaign=threejs-fps-02)
-
 # EMBERLINE — Tactical FPS at Dusk
 
 A round-based 5v5 tactical FPS in the browser, built on three.js 0.187.0.
@@ -118,7 +114,7 @@ mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ```
 
 This copies `game/` and `screenshots/` to `out/` and writes
-`out/dossier.json` (makefun/dossier/v1) with the vendored make.fun library.
+`out/dossier.json` with the vendored library.
 
 ## Layout
 
@@ -141,6 +137,4 @@ game/
     palette.js          the dusk colour plan
 ```
 
-Entry for the make.fun bounty
-[threejs-fps-02 — Make the best three.js tactical FPS](https://make.fun/bounty/threejs-fps-02).
 MIT licensed.
